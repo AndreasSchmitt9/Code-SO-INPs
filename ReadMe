@@ -1,0 +1,9 @@
+README
+
+This Project contains all used code in the creation of the Paper: "Long-term measurements of Ice-Nucleating Particles in the Southern Ocean Region" by Schmitt et al. (in preparation)
+
+The code is spit up in two Folders. Figure contains all code used in the creation of the figures. Analysis contains all code related to the Analysis.
+
+Figure 1: Created with PowerPoint
+Figure 2: print/Results1PINETimeSeasonal.py
+Figure 3: 
