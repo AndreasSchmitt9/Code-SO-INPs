@@ -1,3 +1,8 @@
+"""
+One figure with two subplots:
+  (a) CAPE-k PINE INP concentration for a selected week. Same as Figure3 timeline but 2K, 30min average to show daily changes.
+  (b) radon concentration during the selected week
+  (c) Bivariate Polar plot showing INP concentration between -24 and -26 over wind direction and wind speed."""
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors  

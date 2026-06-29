@@ -1,3 +1,11 @@
+"""
+One figure with six subplots:
+  (a) and (b) show the diurnal percentage of maximum INP concentration laying at a specific time of day. 
+  (c) and (d) show the percentage of days in which minimum INP conentration lay at a specific time of day. 
+  If there was a real diurnal change, the maximum would always be in the middle of the day, and the minimum would be at night.
+  (e) and (f) show the absolute change in INP concentrations during one day. 
+  The plots are split up to baseline and continental based on radon concentration. 
+"""
 import pandas as pd
 import matplotlib
 matplotlib.use('Agg')

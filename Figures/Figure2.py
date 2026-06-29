@@ -1,3 +1,10 @@
+"""
+One figure with two subplots:
+  (a) Cape‑K 2025 PINE timeline with colorbar (4‑hour averages, binned 2°C). Zeros are added below. Zeros are treated as a separate subplot.
+  (b) Monthly Median INP concentration from PINE and CSU-IS during CAPE-k. PINE November 2024 and September 2025 are excluded
+    due to lack of data. IQR is added for a selected Temperature bin. I also tried using average and std_deviation. This shows more of a 
+    seasonality, but the std_deviations are also going to zero and quite large, as there are a few outliers. I used Median + IQR throughout the paper.
+"""
 import pandas as pd
 import matplotlib
 matplotlib.use('Agg')

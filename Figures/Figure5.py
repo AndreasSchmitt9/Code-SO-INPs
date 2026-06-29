@@ -2,12 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 One figure with two subplots:
-  (a) Cape‑K 2025 – radon‑based classification (baseline points only)
-  (b) 18‑19 Feb 2025 – PINE (10‑10 UTC, binned 1°C, x‑error),
-      INSEKT (18 Feb, binned 0.5°C), CSU‑IS (18 Feb, binned 0.5°C, CI error bars)
-      Double‑layer markers, thick error bars.
-
-PINE timestamps are already in UTC – no local timezone conversion needed.
+  (a) Cape‑K 2025 – all baseline data  INP spectrum
+  (b) 18‑19 Feb 2025 – PINE, INSEKT, CSU‑IS 
 """
 
 import pandas as pd
@@ -22,7 +18,7 @@ import pytz
 import xarray as xr
 
 # =============================================================================
-# GLOBAL SETTINGS
+# SETTINGS
 # =============================================================================
 plt.rcParams.update({
     "font.family": "serif",
@@ -43,16 +39,11 @@ plt.rcParams.update({
 
 UTC = pytz.utc  # for defining time windows
 
-# Colours (left panel)
-BRIGHT_BLUE   = '#4477AA'
-BRIGHT_RED    = '#EE6677'
-BRIGHT_GREEN  = '#228833'
-GREY          = 'grey'
 
-# Right panel colours
-PINE_COLOR   = BRIGHT_BLUE
-INSEKT_COLOR = BRIGHT_RED
-CSU_COLOR    = BRIGHT_GREEN
+# colours
+PINE_COLOR   = '#4477AA'
+INSEKT_COLOR = '#EE6677'
+CSU_COLOR    = '#228833'
 
 # Styling constants
 OUTER_MARKER_SIZE = 50
@@ -70,18 +61,8 @@ LEFT_EDGEWIDTH = {
     'CSU-IS baseline':   1.0,
 }
 
-
-# =============================================================================
-# HELPER FUNCTIONS
-# =============================================================================
 def kelvin_to_celsius(k):
     return k - 273.15
-
-def safe_load_csv(path):
-    try:
-        return pd.read_csv(path)
-    except Exception:
-        return pd.DataFrame()
 
 # ---------- INSEKT binning (weighted mean) ----------
 def bin_insekt_data(temp_c, inp, inp_unc_minus, inp_unc_plus, temp_unc, bin_size=0.5):
@@ -104,10 +85,10 @@ def bin_insekt_data(temp_c, inp, inp_unc_minus, inp_unc_plus, temp_unc, bin_size
 
             weights = 1 / (bin_inp_plus + bin_inp_unc_minus)
             temp_mean = np.average(bin_temp, weights=weights)
-            temp_unc_mean =np.sqrt(np.average(bin_temp_unc**2, weights=weights)) #np.average(bin_temp_unc)#
-            inp_mean = np.average(bin_inp)#, weights=weights)
-            inp_unc_minus_mean = np.average(bin_inp_unc_minus)#np.sqrt(np.average(bin_inp_unc_minus**2, weights=weights))
-            inp_unc_plus_mean = np.average(bin_inp_plus)#np.sqrt(np.average(bin_inp_plus**2, weights=weights))
+            temp_unc_mean = np.sqrt(np.average(bin_temp_unc**2, weights=weights))
+            inp_mean = np.average(bin_inp)
+            inp_unc_minus_mean = np.average(bin_inp_unc_minus)
+            inp_unc_plus_mean = np.average(bin_inp_plus)
             count = np.sum(mask)
 
             binned_data.append({
@@ -210,27 +191,22 @@ def load_radon_daily_average(radon_csv_path):
         radon_series = df.set_index(datetime_col)[radon_col].sort_index()
         daily_avg = radon_series.resample('D').mean().dropna()
         return daily_avg
-    except Exception as e:
-        print(f"Error loading radon data: {e}")
+    except Exception:
         return pd.Series(dtype=float)
 
 def get_daily_radon(daily_radon, date):
-    if daily_radon.empty:
-        return np.nan
     target = pd.Timestamp(date).date()
-    try:
-        val = daily_radon.get(pd.Timestamp(target))
-        return val if not pd.isna(val) else np.nan
-    except Exception:
-        return np.nan
+    val = daily_radon.get(pd.Timestamp(target))
+    return val if not pd.isna(val) else np.nan
+    
 
 def load_csu_capek_data(nc_directory, daily_radon):
-    """Returns csu_red (baseline) and csu_grey (others).
+    """Returns csu_red (baseline) only. No grey data.
     Keys: temperature, concentration, time, ci_lower, ci_upper."""
-    csu_red, csu_grey = [], []
+    csu_red = []
     nc_files = sorted(glob.glob(os.path.join(nc_directory, "*.nc")))
     if not nc_files:
-        return csu_red, csu_grey
+        return csu_red
     radon_threshold = 0.1
     for file_path in nc_files:
         try:
@@ -266,22 +242,20 @@ def load_csu_capek_data(nc_directory, daily_radon):
                         ci_u = ci_upper[t_idx, mask_untreated][sort_idx] if ci_upper is not None else None
 
                         radon_val = get_daily_radon(daily_radon, sample_time.date())
-                        data_dict = {
-                            'temperature': temp_untreated[sort_idx],
-                            'concentration': conc_untreated[sort_idx],
-                            'filename': os.path.basename(file_path),
-                            'time': sample_time,
-                            'daily_radon': radon_val,
-                            'ci_lower': ci_l,
-                            'ci_upper': ci_u
-                        }
                         if (not np.isnan(radon_val)) and radon_val < radon_threshold:
+                            data_dict = {
+                                'temperature': temp_untreated[sort_idx],
+                                'concentration': conc_untreated[sort_idx],
+                                'filename': os.path.basename(file_path),
+                                'time': sample_time,
+                                'daily_radon': radon_val,
+                                'ci_lower': ci_l,
+                                'ci_upper': ci_u
+                            }
                             csu_red.append(data_dict)
-                        else:
-                            csu_grey.append(data_dict)
-        except Exception as e:
-            print(f"  Error reading {file_path}: {e}")
-    return csu_red, csu_grey
+        except Exception:
+            pass
+    return csu_red
 
 # =============================================================================
 # MAIN
@@ -290,56 +264,49 @@ if __name__ == "__main__":
     # ------------------ data paths ------------------
     data_dir_cape = '/mnt/c/Users/ro7338/Documents/Masterarbeit/py_raw_insekt_original/Examples/DATA_Cape24'
     baseline_file_path = '/mnt/d/Cape24-data/Cape24/processedPINE/RadonBaselineINP/pine_baseline_by_radon.csv'
+    pine_all_path = '/mnt/d/Cape24-data/Data/processedPINE/Capek.csv'
     exp_list_path = '/mnt/c/Users/ro7338/Documents/Masterarbeit/py_raw_insekt_original/Examples/DATA_Cape24/exp_lst_Cape24.csv'
     csu_nc_dir = "/mnt/d/Cape24-data/CSU-CAPEk/kcginpS3.a1/original_format"
     radon_csv_path = "/mnt/d/Cape24-data/Model/Radon/release-v2/combined_radon_data.csv"
 
     daily_radon = load_radon_daily_average(radon_csv_path)
-    exp_list_cape24_df = safe_load_csv(exp_list_path)
+    exp_list_cape24_df = pd.read_csv(exp_list_path)
 
-    # ------------------ PINE data (all) – already UTC ------------------
-    capek_df = safe_load_csv('/mnt/d/Cape24-data/Data/processedPINE/Capek.csv')
+    # ------------------ PINE data (all) ------------------
+    capek_df = pd.read_csv(pine_all_path)
     PINE_COLS = ['datetime', 'T_min', 'INP_cn_0']
     empty_pine = pd.DataFrame(columns=PINE_COLS + ['T_min_C', 'datetime_utc'])
-    if not capek_df.empty and all(c in capek_df.columns for c in PINE_COLS):
-        capek_df = capek_df[PINE_COLS].copy()
-        # PINE timestamps are already UTC – parse directly
-        capek_df['datetime_utc'] = pd.to_datetime(capek_df['datetime'], utc=True)
-        capek_df['T_min'] = pd.to_numeric(capek_df['T_min'], errors='coerce')
-        capek_df['T_min_C'] = kelvin_to_celsius(capek_df['T_min'])
-        capek_df = capek_df.dropna(subset=['T_min'])
-    else:
-        capek_df = empty_pine
-
+    
+    capek_df = capek_df[PINE_COLS].copy()
+       
+    capek_df['datetime_utc'] = pd.to_datetime(capek_df['datetime'], utc=True) # PINE data is in UTC
+    capek_df['T_min'] = pd.to_numeric(capek_df['T_min'], errors='coerce')
+    capek_df['T_min_C'] = kelvin_to_celsius(capek_df['T_min'])
+    capek_df = capek_df.dropna(subset=['T_min'])
     cutoff_temp_k = 251.15
-    capek_filtered = capek_df[capek_df['T_min'] <= cutoff_temp_k] if not capek_df.empty else empty_pine
+    capek_filtered = capek_df[capek_df['T_min'] <= cutoff_temp_k] 
 
     # ------------------ PINE baseline (hourly) for left panel ------------------
-    baseline_raw = safe_load_csv(baseline_file_path)
-    if not baseline_raw.empty:
-        baseline_raw['T_min'] = pd.to_numeric(baseline_raw['T_min'], errors='coerce')
-        baseline_raw['INP_cn_0'] = pd.to_numeric(baseline_raw['INP_cn_0'], errors='coerce')
-        baseline_raw['datetime'] = pd.to_datetime(baseline_raw['datetime'], errors='coerce')
-        baseline_clean = baseline_raw.dropna(subset=['T_min', 'INP_cn_0', 'datetime']).copy()
-        baseline_clean['T_min_C'] = kelvin_to_celsius(baseline_clean['T_min'])
-        baseline_filt = baseline_clean[baseline_clean['T_min'] <= cutoff_temp_k]
-        baseline_hourly = calculate_hourly_averages_baseline(baseline_filt, freq='2h')
-    else:
-        baseline_hourly = pd.DataFrame()
+    baseline_raw = pd.read_csv(baseline_file_path)
+    
+    baseline_raw['T_min'] = pd.to_numeric(baseline_raw['T_min'], errors='coerce')
+    baseline_raw['INP_cn_0'] = pd.to_numeric(baseline_raw['INP_cn_0'], errors='coerce')
+    baseline_raw['datetime'] = pd.to_datetime(baseline_raw['datetime'], errors='coerce')
+    baseline_clean = baseline_raw.dropna(subset=['T_min', 'INP_cn_0', 'datetime']).copy()
+    baseline_clean['T_min_C'] = kelvin_to_celsius(baseline_clean['T_min'])
+    baseline_filt = baseline_clean[baseline_clean['T_min'] <= cutoff_temp_k]
+    baseline_hourly = calculate_hourly_averages_baseline(baseline_filt, freq='2h')
 
-    # ------------------ INSEKT data (for left panel) ------------------
+    # ------------------ INSEKT data  ------------------
     capek_insekt_processed = process_insekt_raw(data_dir_cape, exp_list_cape24_df)
-    CAPE_INSEKT_HIGHLIGHT_DATE = datetime(2025, 2, 14).date()
-    red_insekt_raw, grey_insekt_raw = [], []
+    CAPE_INSEKT_HIGHLIGHT_DATE = datetime(2025, 2, 14).date() # this day had contaminated filter so it get's removed. All days after 14th are baseline days
+    red_insekt_raw = []
     for fname, info in capek_insekt_processed.items():
-        is_red = info['sample_date'] and info['sample_date'] > CAPE_INSEKT_HIGHLIGHT_DATE
-        if is_red:
+        if info['sample_date'] and info['sample_date'] > CAPE_INSEKT_HIGHLIGHT_DATE:
             red_insekt_raw.append(info)
-        else:
-            grey_insekt_raw.append(info)
 
-    # ------------------ CSU‑IS data ------------------
-    csu_red, csu_grey = load_csu_capek_data(csu_nc_dir, daily_radon)
+    # ------------------ CSU‑IS data  ------------------
+    csu_red = load_csu_capek_data(csu_nc_dir, daily_radon)
 
     # ================== RIGHT PANEL DATA ==================
     target_date = datetime(2025, 2, 18).date()
@@ -349,37 +316,33 @@ if __name__ == "__main__":
     for fname, info in capek_insekt_processed.items():
         if info['sample_date'] == target_date:
             df = info['df']
-            if not df.empty:
-                cols = ['T_mean_C', 'c_INP / 1/l',
-                        'c_INP_unc_minus', 'c_INP_unc_plus']
-                if 'T_std / K' in df.columns:
-                    temp_unc = df['T_std / K']
-                else:
-                    temp_unc = pd.Series(np.ones(len(df)) * 0.5)
-                available = [c for c in cols if c in df.columns]
-                tmp = df[available].copy()
-                tmp['temp_unc'] = temp_unc
-                tmp = tmp.dropna()
-                insekt_raw_all.append(tmp)
+            cols = ['T_mean_C', 'c_INP / 1/l',
+                    'c_INP_unc_minus', 'c_INP_unc_plus']
+            temp_unc = df['T_std / K']
+            
+            available = [c for c in cols if c in df.columns]
+            tmp = df[available].copy()
+            tmp['temp_unc'] = temp_unc
+            tmp = tmp.dropna()
+            insekt_raw_all.append(tmp)
     insekt_raw_df = pd.concat(insekt_raw_all, ignore_index=True) if insekt_raw_all else pd.DataFrame()
 
     # ---- Bin INSEKT (0.5°C) ----
-    if not insekt_raw_df.empty:
-        insekt_binned = bin_insekt_data(
-            insekt_raw_df['T_mean_C'].values,
-            insekt_raw_df['c_INP / 1/l'].values,
-            insekt_raw_df['c_INP_unc_minus'].values,
-            insekt_raw_df['c_INP_unc_plus'].values,
-            insekt_raw_df['temp_unc'].values,
-            bin_size=BIN_SIZE_OTHER
-        )
-        insekt_binned = insekt_binned[insekt_binned['inp_mean'] > 0]
-    else:
-        insekt_binned = pd.DataFrame()
+    
+    insekt_binned = bin_insekt_data(
+        insekt_raw_df['T_mean_C'].values,
+        insekt_raw_df['c_INP / 1/l'].values,
+        insekt_raw_df['c_INP_unc_minus'].values,
+        insekt_raw_df['c_INP_unc_plus'].values,
+        insekt_raw_df['temp_unc'].values,
+        bin_size=BIN_SIZE_OTHER
+    )
+    insekt_binned = insekt_binned[insekt_binned['inp_mean'] > 0]
+   
 
-    # ---- Collect raw CSU‑IS points for 18 Feb ----
+    # ---- Collect CSU‑IS points for 18 Feb  ----
     csu_raw_all = []
-    for d in csu_red + csu_grey:
+    for d in csu_red:
         if d['time'].date() == target_date:
             temp = d['temperature']
             conc = d['concentration']
@@ -399,51 +362,45 @@ if __name__ == "__main__":
     csu_raw_df = pd.concat(csu_raw_all, ignore_index=True) if csu_raw_all else pd.DataFrame()
 
     # ---- Bin CSU‑IS (0.5°C) ----
-    if not csu_raw_df.empty:
-        csu_raw_df['T_bin'] = (np.floor(csu_raw_df['temperature'] / BIN_SIZE_OTHER) * BIN_SIZE_OTHER).round(1)
-        csu_binned = csu_raw_df.groupby('T_bin').agg(
-            mean_conc=('concentration', 'mean'),
-            mean_lower=('ci_lower', 'mean'),
-            mean_upper=('ci_upper', 'mean'),
-            count=('concentration', 'count')
-        ).reset_index()
-        csu_binned['yerr_lower'] =  np.maximum(csu_binned['mean_conc'] - csu_binned['mean_lower'], 1e-6)
-        csu_binned['yerr_upper'] =  np.maximum(csu_binned['mean_upper'] - csu_binned['mean_conc'], 1e-6)
-        csu_binned = csu_binned[csu_binned['mean_conc'] > 0]
-    else:
-        csu_binned = pd.DataFrame()
-
-    # ---- PINE 10-10 UTC (already UTC) ----
-    pine_start = datetime(2025, 2, 18, 10, 0, tzinfo=timezone.utc)
+    csu_raw_df['T_bin'] = (np.floor(csu_raw_df['temperature'] / BIN_SIZE_OTHER) * BIN_SIZE_OTHER).round(1)
+    csu_binned = csu_raw_df.groupby('T_bin').agg(
+        mean_conc=('concentration', 'mean'),
+        mean_lower=('ci_lower', 'mean'),
+        mean_upper=('ci_upper', 'mean'),
+        count=('concentration', 'count')
+    ).reset_index()
+    csu_binned['yerr_lower'] =  np.maximum(csu_binned['mean_conc'] - csu_binned['mean_lower'], 1e-6)
+    csu_binned['yerr_upper'] =  np.maximum(csu_binned['mean_upper'] - csu_binned['mean_conc'], 1e-6)
+    csu_binned = csu_binned[csu_binned['mean_conc'] > 0]
+    
+    # ---- PINE ----
+    pine_start = datetime(2025, 2, 18, 10, 0, tzinfo=timezone.utc) #Local time from is UTC+10
     pine_end   = datetime(2025, 2, 19, 10, 0, tzinfo=timezone.utc)
     pine_24h = capek_filtered[
         (capek_filtered['datetime_utc'] >= pine_start) &
         (capek_filtered['datetime_utc'] <= pine_end)
     ].copy()
 
-    if not pine_24h.empty:
-        pine_24h['T_bin'] = (np.floor(pine_24h['T_min_C'] / BIN_SIZE_PINE) * BIN_SIZE_PINE).round(1)
-        pine_binned = pine_24h.groupby('T_bin').agg(
-            mean_INP=('INP_cn_0', 'mean'),
-            std_INP=('INP_cn_0', 'std'),
-            count=('INP_cn_0', 'count')
-        ).reset_index()
-        pine_binned['error_lower'] = np.maximum(
-            pine_binned['mean_INP'] - np.maximum(pine_binned['mean_INP'] - pine_binned['std_INP'], 0.1),
-            0.001
-        )
-        pine_binned['error_upper'] = np.maximum(pine_binned['std_INP'], 0.001)
-        pine_binned['xerr'] = 1
-        pine_binned = pine_binned[pine_binned['mean_INP'] > 0]
-    else:
-        pine_binned = pd.DataFrame()
+    pine_24h['T_bin'] = (np.floor(pine_24h['T_min_C'] / BIN_SIZE_PINE) * BIN_SIZE_PINE).round(1)
+    pine_binned = pine_24h.groupby('T_bin').agg(
+        mean_INP=('INP_cn_0', 'mean'),
+        std_INP=('INP_cn_0', 'std'),
+        count=('INP_cn_0', 'count')
+    ).reset_index()
+    pine_binned['error_lower'] = np.maximum(
+        pine_binned['mean_INP'] - np.maximum(pine_binned['mean_INP'] - pine_binned['std_INP'], 0.1),
+        0.001
+    )
+    pine_binned['error_upper'] = np.maximum(pine_binned['std_INP'], 0.001)
+    pine_binned['xerr'] = 1
+    pine_binned = pine_binned[pine_binned['mean_INP'] > 0]
+    
 
     # ================== FIGURE ==================
     fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(7, 4))
     fig.subplots_adjust(top=0.8, wspace=0.06, right=0.99, left=0.1)
 
-    # ---------- LEFT SUBPLOT (a) ----------
-    # Only plot baseline data (red/green/blue), no grey "all" data.
+    # ---------- LEFT SUBPLOT ----------
     labeled_left = {
         'BASELINE_HOURLY': False,
         'INSEKT_BASELINE': False,
@@ -453,7 +410,7 @@ if __name__ == "__main__":
     # CSU-IS baseline (green)
     for d in csu_red:
         ax_a.scatter(d['temperature'], d['concentration'],
-                     color=BRIGHT_GREEN, marker='o', s=OUTER_MARKER_SIZE,
+                     color=CSU_COLOR, marker='o', s=OUTER_MARKER_SIZE,
                      edgecolor='black', linewidth=1.0, alpha=1, zorder=1.5,
                      label='CSU-IS baseline' if not labeled_left['CSU_BASELINE'] else "")
         labeled_left['CSU_BASELINE'] = True
@@ -461,21 +418,20 @@ if __name__ == "__main__":
     # INSEKT baseline (red)
     for info in red_insekt_raw:
         df = info['df']
-        if not df.empty:
-            ax_a.scatter(df['T_mean_C'], df['c_INP / 1/l'],
-                         color=BRIGHT_RED, marker='X', s=OUTER_MARKER_SIZE,
-                         label='INSEKT baseline' if not labeled_left['INSEKT_BASELINE'] else "",
-                         linewidths=1, zorder=5, alpha=1.0, edgecolor='black')
-            labeled_left['INSEKT_BASELINE'] = True
+        
+        ax_a.scatter(df['T_mean_C'], df['c_INP / 1/l'],
+                    color=INSEKT_COLOR, marker='X', s=OUTER_MARKER_SIZE,
+                    label='INSEKT baseline' if not labeled_left['INSEKT_BASELINE'] else "",
+                    linewidths=1, zorder=5, alpha=1.0, edgecolor='black')
+        labeled_left['INSEKT_BASELINE'] = True
 
     # PINE baseline hourly (blue)
-    if not baseline_hourly.empty:
-        ax_a.scatter(baseline_hourly['T_min_C_mean'], baseline_hourly['INP_mean'],
-                     color=BRIGHT_BLUE, marker='D', s=OUTER_MARKER_SIZE,
-                     edgecolors='black', linewidths=1,
-                     label='PINE baseline' if not labeled_left['BASELINE_HOURLY'] else "",
-                     zorder=2, alpha=1)
-        labeled_left['BASELINE_HOURLY'] = True
+    ax_a.scatter(baseline_hourly['T_min_C_mean'], baseline_hourly['INP_mean'],
+                color=PINE_COLOR, marker='D', s=OUTER_MARKER_SIZE,
+                edgecolors='black', linewidths=1,
+                label='PINE baseline' if not labeled_left['BASELINE_HOURLY'] else "",
+                zorder=2, alpha=1)
+    labeled_left['BASELINE_HOURLY'] = True
 
     ax_a.set_xlabel('Temperature (°C)')
     ax_a.set_ylabel('INP concentration (L⁻¹)')
@@ -485,15 +441,14 @@ if __name__ == "__main__":
 
     ax_b.tick_params(axis='y', which='both', left=False, labelleft=False)
     ax_a.set_yscale('log')
-    #ax_a.tick_params(axis='both', which='major', labelsize=18, length=6)
     ax_a.tick_params(which='minor', length=0)
 
     # Only baseline items in legend
     desired_order_left = ['PINE baseline', 'INSEKT baseline', 'CSU-IS baseline']
     left_styles = {
-        'PINE baseline': (BRIGHT_BLUE, 'D'),
-        'INSEKT baseline': (BRIGHT_RED, 'X'),
-        'CSU-IS baseline': (BRIGHT_GREEN, 'o')
+        'PINE baseline': (PINE_COLOR, 'D'),
+        'INSEKT baseline': (INSEKT_COLOR, 'X'),
+        'CSU-IS baseline': (CSU_COLOR, 'o')
     }
     handles_left = []
     labels_left = []
@@ -516,16 +471,15 @@ if __name__ == "__main__":
 
     # ---------- RIGHT SUBPLOT (b) – binned data ----------
     # PINE
-    if not pine_binned.empty:
-        ax_b.scatter(pine_binned['T_bin'], pine_binned['mean_INP'],
+    ax_b.scatter(pine_binned['T_bin'], pine_binned['mean_INP'],
                      color='black', marker='D', s=OUTER_MARKER_SIZE,
                      zorder=4, alpha=1.0, linewidth=1)
-        ax_b.scatter(pine_binned['T_bin'], pine_binned['mean_INP'],
+    ax_b.scatter(pine_binned['T_bin'], pine_binned['mean_INP'],
                      color=PINE_COLOR, marker='D', s=OUTER_MARKER_SIZE,
                      label='PINE 10‑10 UTC (1°C bins)',
                      zorder=5, alpha=1.0,
                      edgecolor='black', linewidth=MARKER_EDGEWIDTH)
-        ax_b.errorbar(pine_binned['T_bin'], pine_binned['mean_INP'],
+    ax_b.errorbar(pine_binned['T_bin'], pine_binned['mean_INP'],
                       xerr=pine_binned['xerr'],
                       yerr=[pine_binned['error_lower'], pine_binned['error_upper']],
                       fmt='none', color='black',
@@ -535,16 +489,15 @@ if __name__ == "__main__":
                       zorder=3, alpha=1)
 
     # INSEKT
-    if not insekt_binned.empty:
-        ax_b.scatter(insekt_binned['temp_mean'], insekt_binned['inp_mean'],
+    ax_b.scatter(insekt_binned['temp_mean'], insekt_binned['inp_mean'],
                      color='black', marker='X', s=OUTER_MARKER_SIZE,
                      zorder=4, alpha=1.0, linewidth=1)
-        ax_b.scatter(insekt_binned['temp_mean'], insekt_binned['inp_mean'],
+    ax_b.scatter(insekt_binned['temp_mean'], insekt_binned['inp_mean'],
                      color=INSEKT_COLOR, marker='X', s=OUTER_MARKER_SIZE,
                      label='INSEKT 18 Feb (0.5°C bins)',
                      zorder=5, alpha=1.0,
                      edgecolor='black', linewidth=MARKER_EDGEWIDTH)
-        ax_b.errorbar(insekt_binned['temp_mean'], insekt_binned['inp_mean'],
+    ax_b.errorbar(insekt_binned['temp_mean'], insekt_binned['inp_mean'],
                       xerr=insekt_binned['temp_unc'],
                       yerr=[insekt_binned['inp_unc_minus'], insekt_binned['inp_unc_plus']],
                       fmt='none', color='black',
@@ -554,16 +507,15 @@ if __name__ == "__main__":
                       zorder=3, alpha=1)
 
     # CSU‑IS
-    if not csu_binned.empty:
-        ax_b.scatter(csu_binned['T_bin'], csu_binned['mean_conc'],
+    ax_b.scatter(csu_binned['T_bin'], csu_binned['mean_conc'],
                      color='black', marker='o', s=OUTER_MARKER_SIZE,
                      zorder=4, alpha=1.0, linewidth=1)
-        ax_b.scatter(csu_binned['T_bin'], csu_binned['mean_conc'],
+    ax_b.scatter(csu_binned['T_bin'], csu_binned['mean_conc'],
                      color=CSU_COLOR, marker='o', s=OUTER_MARKER_SIZE,
                      label='CSU-IS 18 Feb',
                      zorder=5, alpha=1.0,
                      edgecolor='black', linewidth=MARKER_EDGEWIDTH)
-        ax_b.errorbar(csu_binned['T_bin'], csu_binned['mean_conc'],
+    ax_b.errorbar(csu_binned['T_bin'], csu_binned['mean_conc'],
                       yerr=[csu_binned['yerr_lower'], csu_binned['yerr_upper']],
                       fmt='none', color='black',
                       capsize=ERRORBAR_CAPSIZE,
@@ -596,5 +548,4 @@ if __name__ == "__main__":
             va='top')
     fig.savefig('Figure5.png')
     fig.savefig('Figure5.pdf')
-    print("Saved Figure5.png")
     plt.close(fig)
