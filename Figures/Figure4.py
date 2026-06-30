@@ -284,7 +284,7 @@ ax_polar.text(-0.15, 0.97, 'c)', transform=ax_polar.transAxes,
 
 pos_polar_new = ax_polar.get_position()
 cax_wind = fig.add_axes([pos_polar_new.x1 + 0.08, pos_polar_new.y0, 0.015, pos_polar_new.height])
-cbar_wind = fig.colorbar(pcm, cax=cax_wind, label='INP conc. for T in [-24°C, -26 °C] \n  (stdL⁻¹) ')
+cbar_wind = fig.colorbar(pcm, cax=cax_wind, label='INP conc. at -25°C (stdL⁻¹) ')
 ticks = [0.1, 0.5, 1, 5, 10]
 ticks = [t for t in ticks if vmin <= t <= vmax]
 cbar_wind.set_ticks(ticks)
