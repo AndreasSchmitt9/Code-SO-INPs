@@ -45,6 +45,8 @@ fourhour_nonzero = fourhour_avg[fourhour_avg['INP_4h_mean'] > 0]
 # Statistics
 grouped = fourhour_nonzero.groupby('temp_bin', observed=False)['INP_4h_mean'].agg([
     'min', 'max', 'mean', 'std', 'median',
+    ('q25', lambda x: x.quantile(0.25)),
+    ('q75', lambda x: x.quantile(0.75)),
     ('IQR', lambda x: x.quantile(0.75) - x.quantile(0.25))
 ])
 
@@ -56,4 +58,6 @@ for bin_name, row in grouped.iterrows():
     if pd.notna(bin_name):
         print(f"{bin_name}:  min = {row['min']:.3f},  max = {row['max']:.3f},  "
               f"mean = {row['mean']:.3f},  std = {row['std']:.3f},  "
-              f"median = {row['median']:.3f},  IQR = {row['IQR']:.3f}")
+              f"median = {row['median']:.3f},  "
+              f"q25 = {row['q25']:.3f},  q75 = {row['q75']:.3f},  "
+              f"IQR = {row['IQR']:.3f}")
